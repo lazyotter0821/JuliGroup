@@ -8,7 +8,7 @@ if(window.location.hostname === 'lazyotter0821.github.io'){
   document.write('<base href="https://lazyotter0821.github.io/JuliGroup/" />');
 }
 </script>
-<title>金色酒吧 · 扫码点单</title>
+<title>聚力小酒馆 · 选您所爱</title>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
   :root{
@@ -253,7 +253,7 @@ if(window.location.hostname === 'lazyotter0821.github.io'){
       <div class="logo"><img src="2025PTMBA3.PNG" alt="Logo" /></div>
       <h1>Juli Bistro · 聚力小酒馆</h1>
     </div>
-    <div class="sub">班级聚会点单 · 实时同步</div>
+    <div class="sub">把酒言欢，聚力成川</div>
   </header>
 
   <div class="wrap">
@@ -261,8 +261,8 @@ if(window.location.hostname === 'lazyotter0821.github.io'){
     <div class="conn-bar offline" id="connBar">
       <span class="dot"></span>
       <span id="connText">正在连接实时同步…</span>
-      <label>房间号：<input id="roomInput" value="聚力三班" maxlength="12" /></label>
-      <label>分享地址：<input id="shareHostInput" placeholder="https://lazyotter0821.github.io/JuliGroup/" maxlength="20" /></label>
+      <label>班级：<input id="roomInput" value="聚力三班" maxlength="12" /></label>
+      <label>日期：<input id="shareHostInput" placeholder="2026年07月12日" maxlength="20" /></label>
     </div>
 
     <!-- 分享卡片 -->
@@ -285,13 +285,13 @@ if(window.location.hostname === 'lazyotter0821.github.io'){
         <li>在电脑/手机打开本页面，记住<b>房间号</b>（默认 聚力三班，可改）</li>
         <li>点"复制点单链接"发到微信群，同学点开即进入点单页</li>
         <li>同学输入<b>点单人姓名</b>，选择酒水并提交 → 订单<b>实时</b>显示在后台</li>
-        <li>⚠️ 每次最多只能点2杯酒水</li>
+        <li>⚠️ 酒虽好，可不要贪杯哦！每次最多可以点2杯</li>
       </ol>
     </div>
 
     <!-- Tabs -->
     <div class="tabs">
-      <button id="tabMenu" class="active" onclick="switchTab('menu')">🍸 点单菜单</button>
+      <button id="tabMenu" class="active" onclick="switchTab('menu')">🍸 酒水清单</button>
       <button id="tabAdmin" onclick="switchTab('admin')">🛠️ 店家后台</button>
     </div>
 
