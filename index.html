@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<script>
+if(window.location.hostname === 'lazyotter0821.github.io'){
+  document.write('<base href="https://lazyotter0821.github.io/JuliGroup/" />');
+}
+</script>
 <title>金色酒吧 · 扫码点单</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
   :root{
@@ -41,8 +45,9 @@
     width:42px;height:42px;border-radius:50%;
     background:radial-gradient(circle at 30% 30%, var(--gold-light), var(--gold-deep));
     box-shadow:0 0 14px rgba(212,175,55,.5);
-    display:grid;place-items:center;font-weight:800;color:#1a1206;font-size:20px;
+    display:grid;place-items:center;overflow:hidden;
   }
+  .brand .logo img{width:100%;height:100%;object-fit:cover}
   .brand h1{
     font-size:22px;margin:0;letter-spacing:2px;
     background:linear-gradient(90deg,var(--gold-light),var(--gold),var(--gold-deep));
@@ -81,7 +86,7 @@
   }
   /* 只显示一个二维码：隐藏 canvas，保留 img（避免重复） */
   .qr-wrap canvas{display:none!important}
-  .qr-wrap img{display:block!important;width:220px!important;height:220px!important}
+  .qr-wrap img{display:block!important;width:220px!important;height:220px!important;object-fit:contain}
   .share-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
   .share-row button{
     cursor:pointer;border:1px solid var(--line);
@@ -169,6 +174,18 @@
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+  .lightbox{
+    position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.92);z-index:99;
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .3s;
+  }
+  .lightbox.show{opacity:1;pointer-events:auto}
+  .lightbox img{max-width:90%;max-height:90%;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .lightbox .close{
+    position:absolute;top:16px;right:16px;color:#fff;font-size:24px;
+    cursor:pointer;padding:8px;border-radius:50%;background:rgba(255,255,255,.1);
+  }
+
   .admin-head{display:flex;align-items:center;justify-content:space-between;margin:14px 0 10px;gap:8px;flex-wrap:wrap}
   .admin-head h2{margin:0;font-size:18px;color:var(--gold-light);letter-spacing:1px}
   .admin-stats{display:flex;gap:8px;flex-wrap:wrap}
@@ -233,8 +250,8 @@
 <body>
   <header class="top">
     <div class="brand">
-      <div class="logo">金</div>
-      <h1>GOLDEN BAR · 金色酒吧</h1>
+      <div class="logo"><img src="2025PTMBA3.PNG" alt="Logo" /></div>
+      <h1>Juli Bistro · 聚力小酒馆</h1>
     </div>
     <div class="sub">班级聚会点单 · 实时同步</div>
   </header>
@@ -252,11 +269,12 @@
     <div class="share-card">
       <h2>分享点单链接给同学</h2>
       <p class="hint">把下面的二维码或链接发给同学（微信群发链接最方便）</p>
-      <div class="qr-wrap" id="qrcode"></div>
+      <div class="qr-wrap" id="qrcode">
+        <img src="IMG_6201.JPG" style="display:block;width:220px;height:auto;border-radius:12px;cursor:pointer;object-fit:contain;" onclick="openLightbox('IMG_6201.JPG')" />
+      </div>
       <div class="share-row">
         <button class="primary" onclick="copyLink()">📋 复制点单链接</button>
         <button onclick="copyRoom()">🔑 复制房间号</button>
-        <button onclick="regenQR()">🔄 刷新二维码</button>
       </div>
       <div class="url-box">点单链接：<code id="orderUrl">loading…</code></div>
     </div>
@@ -264,11 +282,10 @@
     <div class="guide">
       <b>使用说明（班级聚会）</b>
       <ol>
-        <li>班长在电脑/手机打开本页面，记住<b>房间号</b>（默认 聚力三班，可改）</li>
+        <li>在电脑/手机打开本页面，记住<b>房间号</b>（默认 聚力三班，可改）</li>
         <li>点"复制点单链接"发到微信群，同学点开即进入点单页</li>
-        <li>同学输入<b>相同房间号</b>，选酒水并提交 → 订单<b>实时</b>显示在班长后台</li>
-        <li>⚠️ 必须联网（实时同步走公共 MQTT 服务，无需注册）</li>
-        <li>扫不了二维码没关系，直接用<b>链接</b>分享更稳</li>
+        <li>同学输入<b>点单人姓名</b>，选择酒水并提交 → 订单<b>实时</b>显示在后台</li>
+        <li>⚠️ 每次最多只能点2杯酒水</li>
       </ol>
     </div>
 
@@ -280,13 +297,13 @@
 
     <!-- Menu Panel -->
     <section id="panelMenu" class="panel active">
-      <div id="menuArea"></div>
       <div class="note-row">
         <input id="orderNameInput" type="text" placeholder="点单人姓名（必填）" maxlength="20" />
       </div>
       <div class="note-row">
         <input id="noteInput" type="text" placeholder="备注（可选，如：少冰、桌号）" maxlength="60" />
       </div>
+      <div id="menuArea"></div>
       <div class="cart-bar">
         <div class="total">
           <div class="lbl">已选</div>
@@ -402,26 +419,21 @@ function copyRoom(){
   ta.remove();
 }
 
-/* ===== 二维码（修复重复：只保留 img） ===== */
+/* ===== 二维码（使用自定义图片） ===== */
 function initQR(){
   var url = buildOrderURL();
   $('#orderUrl').textContent = url;
-  var box = $('#qrcode');
-  box.innerHTML = '';
-  new QRCode(box, {
-    text: url, width: 220, height: 220,
-    colorDark: '#000000', colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.H
-  });
-  // qrcodejs 会生成 canvas + img，隐藏 canvas 只显示 img，避免出现两个
-  setTimeout(function(){
-    var cs = box.querySelectorAll('canvas');
-    for(var i=0;i<cs.length;i++) cs[i].style.display = 'none';
-    var img = box.querySelector('img');
-    if(img){ img.style.display='block'; img.style.width='220px'; img.style.height='220px'; }
-  }, 60);
 }
 function regenQR(){ initQR(); toast('二维码已刷新'); }
+
+/* ===== 图片全屏查看 ===== */
+function openLightbox(src){
+  $('#lightboxImg').src = src;
+  $('#lightbox').classList.add('show');
+}
+function closeLightbox(){
+  $('#lightbox').classList.remove('show');
+}
 
 /* ===== MQTT 实时同步（公共 broker，免注册） ===== */
 function setConn(state){
@@ -732,11 +744,7 @@ function checkFileMode(){
     warn.style.borderColor = '#e25555';
     warn.style.background = 'rgba(60,15,15,.85)';
     warn.style.color = '#ffcccc';
-    warn.innerHTML = '<b style="color:#ff9999">⚠️ 当前是本地文件模式，手机无法访问此链接！</b>' +
-      '<ol style="margin-top:6px">' +
-      '<li>请关闭浏览器，双击运行同目录下的 <b style="color:#f5e7a0">start-server.bat</b></li>' +
-      '<li>它会自动启动服务器并打开本页（地址会变为 http://...）</li>' +
-      '<li>启动后，手机和电脑连同一 WiFi，用手机扫二维码或输入网址即可点单</li>' +
+    warn.innerHTML = '<b style="color:#ff9999">⚠️ 酒虽好，可不要贪杯哦！</li>' +
       '</ol>';
     var share = document.querySelector('.share-card');
     share.parentNode.insertBefore(warn, share.nextSibling);
@@ -775,5 +783,10 @@ function init(){
 }
 window.addEventListener('DOMContentLoaded', init);
 </script>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="close" onclick="event.stopPropagation();closeLightbox()">✕</div>
+  <img id="lightboxImg" src="" />
+</div>
 </body>
 </html>
