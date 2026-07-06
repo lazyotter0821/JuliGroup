@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>金色酒吧 · 扫码点单</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"></script>
+<style>
+  :root{
+    --gold:#d4af37;
+    --gold-light:#f5e7a0;
+    --gold-deep:#a67c00;
+    --bg-1:#0a0a0a;
+    --text:#f3ead6;
+    --text-dim:#b9a883;
+    --line:rgba(212,175,55,.25);
+    --card:rgba(34,28,20,.72);
+    --green:#9ad29a;
+    --red:#e25555;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 50% -10%, #2a2114 0%, var(--bg-1) 60%) fixed;
+    color:var(--text);
+    min-height:100vh;
+    line-height:1.5;
+  }
+  a{color:var(--gold-light)}
+  .wrap{max-width:880px;margin:0 auto;padding:0 14px 70px}
+
+  header.top{
+    text-align:center;padding:22px 16px 16px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(212,175,55,.08), transparent);
+  }
+  .brand{display:flex;align-items:center;justify-content:center;gap:10px}
+  .brand .logo{
+    width:42px;height:42px;border-radius:50%;
+    background:radial-gradient(circle at 30% 30%, var(--gold-light), var(--gold-deep));
+    box-shadow:0 0 14px rgba(212,175,55,.5);
+    display:grid;place-items:center;font-weight:800;color:#1a1206;font-size:20px;
+  }
+  .brand h1{
+    font-size:22px;margin:0;letter-spacing:2px;
+    background:linear-gradient(90deg,var(--gold-light),var(--gold),var(--gold-deep));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .sub{color:var(--text-dim);font-size:13px;margin-top:6px;letter-spacing:1px}
+
+  /* 连接状态条 */
+  .conn-bar{
+    display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;
+    margin:12px auto 4px;max-width:520px;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:8px 12px;font-size:12px;
+  }
+  .conn-bar .dot{width:8px;height:8px;border-radius:50%;background:var(--text-dim);display:inline-block}
+  .conn-bar.online .dot{background:var(--green);box-shadow:0 0 6px var(--green)}
+  .conn-bar.connecting .dot{background:#f5c451}
+  .conn-bar.offline .dot{background:var(--red)}
+  .conn-bar input{
+    background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--gold-light);
+    border-radius:8px;padding:4px 8px;font-size:12px;width:90px;text-align:center;outline:none;
+  }
+  .conn-bar label{color:var(--text-dim)}
+
+  /* 分享卡片 */
+  .share-card{
+    margin:12px auto 6px;max-width:520px;
+    background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:16px;text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+  .share-card h2{margin:0 0 4px;font-size:15px;color:var(--gold-light)}
+  .share-card p.hint{margin:0 0 10px;font-size:12px;color:var(--text-dim)}
+  .qr-wrap{
+    display:inline-block;padding:16px;background:#fff;border-radius:12px;line-height:0;
+  }
+  /* 只显示一个二维码：隐藏 canvas，保留 img（避免重复） */
+  .qr-wrap canvas{display:none!important}
+  .qr-wrap img{display:block!important;width:220px!important;height:220px!important}
+  .share-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  .share-row button{
+    cursor:pointer;border:1px solid var(--line);
+    background:rgba(212,175,55,.12);color:var(--gold-light);
+    padding:9px 14px;border-radius:10px;font-size:13px;
+  }
+  .share-row button.primary{
+    background:linear-gradient(90deg,var(--gold-deep),var(--gold));
+    color:#1a1206;font-weight:700;border-color:transparent;
+  }
+  .url-box{
+    margin-top:10px;font-size:11px;color:var(--text-dim);word-break:break-all;
+    background:rgba(0,0,0,.35);border:1px dashed var(--line);
+    padding:8px 10px;border-radius:10px;text-align:left;
+  }
+  .url-box code{color:var(--gold-light)}
+
+  .tabs{display:flex;gap:8px;margin:18px 0 6px;flex-wrap:wrap}
+  .tabs button{
+    flex:1;min-width:120px;cursor:pointer;
+    background:transparent;border:1px solid var(--line);color:var(--text-dim);
+    padding:10px 12px;border-radius:10px;font-size:14px;transition:.2s;
+  }
+  .tabs button.active{
+    color:#1a1206;background:linear-gradient(90deg,var(--gold),var(--gold-light));
+    border-color:transparent;font-weight:700;
+  }
+
+  section.panel{display:none}
+  section.panel.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .menu-title{
+    display:flex;align-items:center;gap:10px;margin:16px 0 10px;
+    color:var(--gold-light);font-size:15px;letter-spacing:1px;
+  }
+  .menu-title::before,.menu-title::after{
+    content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);
+  }
+  .item{
+    display:flex;align-items:center;gap:12px;
+    background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:10px 12px;margin-bottom:10px;
+  }
+  .item .emoji{
+    width:48px;height:48px;border-radius:12px;flex:0 0 48px;
+    background:linear-gradient(135deg,#2a2114,#1a140a);
+    display:grid;place-items:center;font-size:26px;border:1px solid var(--line);
+  }
+  .item .info{flex:1;min-width:0}
+  .item .name{font-size:15px;color:var(--text);font-weight:600}
+  .item .desc{font-size:12px;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ctrl{display:flex;align-items:center;gap:8px}
+  .ctrl button{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+    background:rgba(212,175,55,.12);color:var(--gold-light);font-size:20px;
+    cursor:pointer;display:grid;place-items:center;line-height:1;transition:.15s;
+  }
+  .ctrl button:active{transform:scale(.9)}
+  .ctrl .qty{min-width:26px;text-align:center;font-weight:700;color:var(--text);font-size:16px}
+
+  .cart-bar{
+    position:sticky;bottom:0;left:0;right:0;z-index:30;
+    background:linear-gradient(180deg, rgba(10,10,10,.4), rgba(10,10,10,.96));
+    border-top:1px solid var(--line);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    display:flex;align-items:center;gap:12px;
+  }
+  .cart-bar .total{flex:1}
+  .cart-bar .total .lbl{font-size:12px;color:var(--text-dim)}
+  .cart-bar .total .amt{font-size:18px;color:var(--gold);font-weight:800}
+  .submit{
+    border:none;cursor:pointer;border-radius:24px;padding:12px 22px;font-size:15px;font-weight:800;
+    color:#1a1206;background:linear-gradient(90deg,var(--gold-deep),var(--gold-light));
+    box-shadow:0 8px 22px rgba(212,175,55,.35);transition:.15s;
+  }
+  .submit:active{transform:scale(.96)}
+  .submit:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+
+  .toast{
+    position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-20px);
+    background:#1a140a;border:1px solid var(--gold);color:var(--gold-light);
+    padding:10px 18px;border-radius:24px;font-size:14px;z-index:80;
+    opacity:0;pointer-events:none;transition:.3s;box-shadow:0 8px 24px rgba(0,0,0,.5);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .admin-head{display:flex;align-items:center;justify-content:space-between;margin:14px 0 10px;gap:8px;flex-wrap:wrap}
+  .admin-head h2{margin:0;font-size:18px;color:var(--gold-light);letter-spacing:1px}
+  .admin-stats{display:flex;gap:8px;flex-wrap:wrap}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--text-dim)}
+  .stat b{color:var(--gold);font-size:14px}
+  .admin-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .admin-actions button{cursor:pointer;border:1px solid var(--line);background:rgba(212,175,55,.1);color:var(--gold-light);padding:7px 12px;border-radius:8px;font-size:13px}
+  .admin-actions button.danger{color:#ffcccc;border-color:rgba(226,85,85,.4);background:rgba(226,85,85,.12)}
+
+  .filter{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+  .filter button{cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--text-dim);padding:6px 12px;border-radius:20px;font-size:12px}
+  .filter button.active{background:var(--gold);color:#1a1206;border-color:transparent;font-weight:700}
+
+  .orders{list-style:none;margin:0;padding:0}
+  .order{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+  .order-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .order-id{font-size:13px;color:var(--gold-light);font-weight:700}
+  .order-time{font-size:12px;color:var(--text-dim)}
+  .order-from{font-size:11px;color:var(--text-dim);background:rgba(212,175,55,.1);padding:2px 8px;border-radius:20px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--text-dim);background:rgba(212,175,55,.08)}
+  .badge.new{color:#1a1206;background:var(--gold);border-color:transparent;font-weight:700}
+  .badge.done{color:#9ad29a;border-color:rgba(154,210,154,.4);background:rgba(154,210,154,.1)}
+  .badge.canceled{color:#ffcccc;border-color:rgba(226,85,85,.4);background:rgba(226,85,85,.12)}
+  .order-body{margin:8px 0 0}
+  .order-line{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed rgba(212,175,55,.12)}
+  .order-line:last-child{border-bottom:none}
+  .order-line .n{color:var(--text)}
+  .order-line .q{color:var(--gold-light);font-weight:700}
+  .order-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:8px;flex-wrap:wrap}
+  .order-foot .total-qty{color:var(--text-dim);font-size:13px}
+  .order-foot .total-qty b{color:var(--gold)}
+  .order-foot .acts{display:flex;gap:6px}
+  .order-foot .acts button{cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--text-dim);padding:5px 10px;border-radius:8px;font-size:12px}
+  .order-foot .acts button:hover{background:rgba(212,175,55,.12);color:var(--gold-light)}
+  .order-note{font-size:12px;color:var(--text-dim);margin-top:6px;font-style:italic}
+  .empty{text-align:center;color:var(--text-dim);padding:40px 10px;font-size:14px}
+
+  .note-row{margin:12px 0}
+  .note-row input{width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:10px;font-size:14px;outline:none}
+  .note-row input:focus{border-color:var(--gold)}
+  #orderNameInput{border-color:var(--gold);background:rgba(212,175,55,.08)}
+
+  .order-name{font-size:13px;color:var(--gold-light);margin:6px 0 4px;font-weight:600}
+  .order-name b{color:var(--gold)}
+
+  .guide{margin:14px auto;max-width:520px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--text-dim)}
+  .guide b{color:var(--gold-light)}
+  .guide ol{margin:6px 0 0;padding-left:18px}
+  .guide li{margin:4px 0}
+
+  footer{text-align:center;color:var(--text-dim);font-size:12px;margin-top:24px;padding-top:14px;border-top:1px solid var(--line)}
+
+  @media (max-width:560px){
+    .brand h1{font-size:19px}
+    .item .emoji{width:42px;height:42px;flex-basis:42px;font-size:22px}
+    .item .desc{display:none}
+    .qr-wrap img{width:180px!important;height:180px!important}
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="logo">金</div>
+      <h1>GOLDEN BAR · 金色酒吧</h1>
+    </div>
+    <div class="sub">班级聚会点单 · 实时同步</div>
+  </header>
+
+  <div class="wrap">
+    <!-- 连接状态 + 房间号 + 分享地址 -->
+    <div class="conn-bar offline" id="connBar">
+      <span class="dot"></span>
+      <span id="connText">正在连接实时同步…</span>
+      <label>房间号：<input id="roomInput" value="聚力三班" maxlength="12" /></label>
+      <label>分享地址：<input id="shareHostInput" placeholder="手机访问用的IP:端口" maxlength="20" /></label>
+    </div>
+
+    <!-- 分享卡片 -->
+    <div class="share-card">
+      <h2>分享点单链接给同学</h2>
+      <p class="hint">把下面的二维码或链接发给同学（微信群发链接最方便）</p>
+      <div class="qr-wrap" id="qrcode"></div>
+      <div class="share-row">
+        <button class="primary" onclick="copyLink()">📋 复制点单链接</button>
+        <button onclick="copyRoom()">🔑 复制房间号</button>
+        <button onclick="regenQR()">🔄 刷新二维码</button>
+      </div>
+      <div class="url-box">点单链接：<code id="orderUrl">loading…</code></div>
+    </div>
+
+    <div class="guide">
+      <b>使用说明（班级聚会）</b>
+      <ol>
+        <li>班长在电脑/手机打开本页面，记住<b>房间号</b>（默认 聚力三班，可改）</li>
+        <li>点"复制点单链接"发到微信群，同学点开即进入点单页</li>
+        <li>同学输入<b>相同房间号</b>，选酒水并提交 → 订单<b>实时</b>显示在班长后台</li>
+        <li>⚠️ 必须联网（实时同步走公共 MQTT 服务，无需注册）</li>
+        <li>扫不了二维码没关系，直接用<b>链接</b>分享更稳</li>
+      </ol>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button id="tabMenu" class="active" onclick="switchTab('menu')">🍸 点单菜单</button>
+      <button id="tabAdmin" onclick="switchTab('admin')">🛠️ 店家后台</button>
+    </div>
+
+    <!-- Menu Panel -->
+    <section id="panelMenu" class="panel active">
+      <div id="menuArea"></div>
+      <div class="note-row">
+        <input id="orderNameInput" type="text" placeholder="点单人姓名（必填）" maxlength="20" />
+      </div>
+      <div class="note-row">
+        <input id="noteInput" type="text" placeholder="备注（可选，如：少冰、桌号）" maxlength="60" />
+      </div>
+      <div class="cart-bar">
+        <div class="total">
+          <div class="lbl">已选</div>
+          <div class="amt"><span id="cartCount">0</span> 杯</div>
+        </div>
+        <button class="submit" id="submitBtn" onclick="submitOrder()">提交点单</button>
+      </div>
+    </section>
+
+    <!-- Admin Panel -->
+    <section id="panelAdmin" class="panel">
+      <div class="admin-head">
+        <h2>实时订单后台</h2>
+        <div class="admin-actions">
+          <button onclick="exportOrders()">⬇ 导出订单</button>
+          <button class="danger" onclick="clearAllOrders()">🗑 清空本机</button>
+        </div>
+      </div>
+      <div class="admin-stats">
+        <div class="stat">订单数 <b id="statCount">0</b></div>
+        <div class="stat">总杯数 <b id="statCups">0</b></div>
+        <div class="stat">待处理 <b id="statNew">0</b></div>
+      </div>
+      <div class="filter">
+        <button class="active" data-f="all" onclick="setFilter('all')">全部</button>
+        <button data-f="new" onclick="setFilter('new')">待处理</button>
+        <button data-f="done" onclick="setFilter('done')">已完成</button>
+        <button data-f="canceled" onclick="setFilter('canceled')">已取消</button>
+      </div>
+      <ul class="orders" id="ordersList"></ul>
+    </section>
+
+    <footer>© GOLDEN BAR · 纯前端 + 公共MQTT实时同步 · 无需后端注册</footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+/* ===== 数据：酒水菜单 ===== */
+var MENU = [
+  {id:'whisky', name:'01 我非常不comfortable', emoji:'wine/01.png', desc:'Mojito', cat:'whisky'},
+  {id:'gin',    name:'02 祝你一切顺利',             emoji:'wine/02.png', desc:'Margarita',   cat:'cocktail'},
+  {id:'mojito', name:'03 Take away',         emoji:'wine/03.png', desc:'Long Island Iced Tea', cat:'cocktail'},
+  {id:'margarita', name:'04 井冈山的兄弟', emoji:'wine/04.png', desc:'Old Fashioned',    cat:'cocktail'},
+  {id:'martini',name:'05 Goodwill',  emoji:'wine/05.png', desc:'Negroni',cat:'cocktail'},
+  {id:'beer',   name:'06 聚力成川',           emoji:'wine/06.png', desc:'Juli River', cat:'beer'},
+  {id:'stout',  name:'07 微醺双鸭山',              emoji:'wine/07.png', desc:'Namikaee', cat:'beer'},
+  {id:'wine',   name:'08 善思堂不蕉绿',        emoji:'wine/08.png', desc:'GodFather',  cat:'wine'},
+  {id:'champagne', name:'09 Captain冠',     emoji:'wine/09.png', desc:'Moscow Mule',cat:'wine'},
+  {id:'shot',   name:'10 研一节课快乐',            emoji:'wine/10.png', desc:'Martini',cat:'shot'},
+];
+var CAT_TITLES = {
+  whisky:'🥃 威士忌', cocktail:'🍸 经典鸡尾酒', beer:'🍺 精酿啤酒',
+  wine:'🍷 葡萄酒 & 香槟', shot:'⚡ 烈酒 Shot', soft:'🥤 无酒精 & 小食', food:'🥜 小食'
+};
+
+/* ===== 状态 ===== */
+var cart = {};
+var orders = [];
+var currentFilter = 'all';
+var roomCode = '聚力三班';
+var client = null;          // MQTT 客户端
+var myClientId = 'gb_' + Math.random().toString(16).slice(2,10);
+var connected = false;
+
+/* ===== 工具 ===== */
+function $(s){ return document.querySelector(s); }
+function escapeHtml(s){
+  var d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+function toast(msg){
+  var t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+}
+function pad(n){ return n<10 ? '0'+n : ''+n; }
+function fmtTime(ts){
+  var d = new Date(ts);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
+
+/* ===== 房间号 / 链接 ===== */
+var shareHost = '';
+function topicBase(){ return 'goldenbar/' + roomCode; }
+
+function buildOrderURL(){
+  var here = window.location.href.split('#')[0];
+  if(shareHost && (here.indexOf('localhost') >= 0 || here.indexOf('127.0.0.1') >= 0)){
+    var proto = window.location.protocol;
+    var path = here.replace(/^[^/]+\/\/[^/]+/, '');
+    return proto + '//' + shareHost + path + '#order=' + encodeURIComponent(roomCode);
+  }
+  return here + '#order=' + encodeURIComponent(roomCode);
+}
+function copyLink(){
+  var url = buildOrderURL();
+  var ta = document.createElement('textarea');
+  ta.value = url;
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('点单链接已复制 ✓'); }
+  catch(e){ toast('请手动复制：' + url); }
+  ta.remove();
+}
+function copyRoom(){
+  var ta = document.createElement('textarea');
+  ta.value = roomCode;
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('房间号已复制 ✓'); }catch(e){}
+  ta.remove();
+}
+
+/* ===== 二维码（修复重复：只保留 img） ===== */
+function initQR(){
+  var url = buildOrderURL();
+  $('#orderUrl').textContent = url;
+  var box = $('#qrcode');
+  box.innerHTML = '';
+  new QRCode(box, {
+    text: url, width: 220, height: 220,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+  // qrcodejs 会生成 canvas + img，隐藏 canvas 只显示 img，避免出现两个
+  setTimeout(function(){
+    var cs = box.querySelectorAll('canvas');
+    for(var i=0;i<cs.length;i++) cs[i].style.display = 'none';
+    var img = box.querySelector('img');
+    if(img){ img.style.display='block'; img.style.width='220px'; img.style.height='220px'; }
+  }, 60);
+}
+function regenQR(){ initQR(); toast('二维码已刷新'); }
+
+/* ===== MQTT 实时同步（公共 broker，免注册） ===== */
+function setConn(state){
+  connected = (state === 'online');
+  var bar = $('#connBar');
+  bar.classList.remove('online','connecting','offline');
+  bar.classList.add(state);
+  var txt = $('#connText');
+  if(state==='online') txt.textContent = '已连接实时同步（多设备共享）';
+  else if(state==='connecting') txt.textContent = '正在连接实时同步…';
+  else txt.textContent = '未联网（仅本机记录，换网络/刷新可重连）';
+}
+function connectMQTT(){
+  if(typeof mqtt === 'undefined'){ setConn('offline'); return; }
+  setConn('connecting');
+  try{
+    client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+      clientId: myClientId,
+      clean: true,
+      connectTimeout: 5000,
+      keepalive: 30
+    });
+  }catch(e){ setConn('offline'); return; }
+
+  client.on('connect', function(){
+    setConn('online');
+    client.subscribe(topicBase() + '/o');
+    client.subscribe(topicBase() + '/req');
+    // 上线后请求一次别人的订单列表
+    client.publish(topicBase() + '/req', JSON.stringify({from: myClientId}), {qos:0});
+    toast('已加入房间 ' + roomCode);
+  });
+  client.on('reconnect', function(){ setConn('connecting'); });
+  client.on('close', function(){ setConn('offline'); });
+  client.on('error', function(){ setConn('offline'); });
+
+  client.on('message', function(topic, message){
+    try{
+      var payload = JSON.parse(message.toString());
+      if(topic.indexOf('/req') >= 0){
+        // 别人请求同步，把我的订单广播出去（避免回环：带 from）
+        if(payload.from !== myClientId && orders.length > 0){
+          client.publish(topicBase() + '/o', JSON.stringify({type:'bulk', from: myClientId, data: orders}), {qos:0});
+        }
+        return;
+      }
+      // 订单消息
+      if(payload.type === 'bulk' && payload.from !== myClientId){
+        var arr = payload.data || [];
+        var changed = false;
+        arr.forEach(function(o){ if(addOrderIfNew(o)) changed = true; });
+        if(changed){ saveOrders(); renderOrders(); }
+      } else if(payload.type === 'order' && payload.from !== myClientId){
+        if(addOrderIfNew(payload.data)){ saveOrders(); renderOrders(); }
+      } else if(payload.type === 'status' && payload.from !== myClientId){
+        // 别人改了状态
+        updateOrderStatusLocal(payload.id, payload.status);
+      } else if(payload.type === 'delete' && payload.from !== myClientId){
+        removeOrderLocal(payload.id);
+      }
+    }catch(e){}
+  });
+}
+function addOrderIfNew(o){
+  if(!o || !o.id) return false;
+  for(var i=0;i<orders.length;i++){ if(orders[i].id === o.id) return false; }
+  orders.unshift(o);
+  return true;
+}
+function updateOrderStatusLocal(id, st){
+  for(var i=0;i<orders.length;i++){
+    if(orders[i].id === id){ orders[i].status = st; saveOrders(); renderOrders(); return; }
+  }
+}
+function removeOrderLocal(id){
+  orders = orders.filter(function(x){ return x.id !== id; });
+  saveOrders(); renderOrders();
+}
+function publishOrder(order){
+  if(!connected || !client) return;
+  client.publish(topicBase() + '/o', JSON.stringify({type:'order', from: myClientId, data: order}), {qos:0});
+}
+function publishStatus(id, st){
+  if(!connected || !client) return;
+  client.publish(topicBase() + '/o', JSON.stringify({type:'status', from: myClientId, id:id, status:st}), {qos:0});
+}
+function publishDelete(id){
+  if(!connected || !client) return;
+  client.publish(topicBase() + '/o', JSON.stringify({type:'delete', from: myClientId, id:id}), {qos:0});
+}
+
+/* ===== 菜单渲染 ===== */
+function renderMenu(){
+  var area = $('#menuArea');
+  area.innerHTML = '';
+  MENU.forEach(function(item){
+    var el = document.createElement('div');
+    el.className = 'item';
+    var emoji = document.createElement('div'); emoji.className='emoji';
+    if(item.emoji.match(/\.(png|jpg|jpeg|gif|webp)$/i)){
+      var img = document.createElement('img');
+      img.src = item.emoji;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.borderRadius = '10px';
+      img.style.objectFit = 'cover';
+      emoji.appendChild(img);
+    } else {
+      emoji.textContent = item.emoji;
+    }
+    var name = document.createElement('div'); name.className='name'; name.textContent=item.name;
+    var desc = document.createElement('div'); desc.className='desc'; desc.textContent=item.desc;
+    var info = document.createElement('div'); info.className='info'; info.appendChild(name); info.appendChild(desc);
+    var minusBtn = document.createElement('button'); minusBtn.textContent='−';
+    minusBtn.onclick = (function(id){ return function(){ change(id,-1); }; })(item.id);
+    var qty = document.createElement('span'); qty.className='qty'; qty.id='qty-'+item.id; qty.textContent='0';
+    var plusBtn = document.createElement('button'); plusBtn.textContent='＋';
+    plusBtn.onclick = (function(id){ return function(){ change(id,1); }; })(item.id);
+    var ctrl = document.createElement('div'); ctrl.className='ctrl';
+    ctrl.appendChild(minusBtn); ctrl.appendChild(qty); ctrl.appendChild(plusBtn);
+    el.appendChild(emoji); el.appendChild(info); el.appendChild(ctrl);
+    area.appendChild(el);
+  });
+}
+function change(id, delta){
+  var MAX_TOTAL = 2;
+  cart[id] = cart[id] || 0;
+  if(delta > 0){
+    var currentTotal = 0;
+    MENU.forEach(function(m){ currentTotal += (cart[m.id] || 0); });
+    if(currentTotal >= MAX_TOTAL){
+      toast('每次最多只能点2杯');
+      return;
+    }
+  }
+  cart[id] = Math.max(0, cart[id] + delta);
+  var el = document.getElementById('qty-' + id);
+  if(el) el.textContent = cart[id];
+  updateCart();
+}
+function updateCart(){
+  var count = 0;
+  MENU.forEach(function(m){ count += (cart[m.id] || 0); });
+  $('#cartCount').textContent = count;
+  $('#submitBtn').disabled = (count === 0);
+}
+
+/* ===== 提交订单 ===== */
+function submitOrder(){
+  var items = [];
+  var totalQty = 0;
+  MENU.forEach(function(m){
+    var q = cart[m.id] || 0;
+    if(q > 0){ items.push({id:m.id, name:m.name, qty:q}); totalQty += q; }
+  });
+  if(items.length === 0){ toast('请先选择酒水'); return; }
+  if(totalQty > 2){ toast('每次最多只能点2杯'); return; }
+  var orderName = ($('#orderNameInput').value || '').trim();
+  if(!orderName){ toast('请填写点单人姓名'); return; }
+  var note = ($('#noteInput').value || '').trim();
+  var order = {
+    id: 'ORD' + Date.now().toString().slice(-8) + Math.floor(Math.random()*90+10),
+    time: Date.now(),
+    name: orderName,
+    items: items,
+    note: note,
+    totalQty: totalQty,
+    from: myClientId,
+    status: 'new'
+  };
+  if(addOrderIfNew(order)){
+    saveOrders();
+    publishOrder(order);
+  }
+  cart = {};
+  $('#orderNameInput').value = '';
+  $('#noteInput').value = '';
+  renderMenu();
+  updateCart();
+  toast('点单已提交 ✓');
+  renderOrders();
+  switchTab('admin');
+}
+
+/* ===== 后台渲染 ===== */
+function setFilter(f){
+  currentFilter = f;
+  var btns = document.querySelectorAll('.filter button');
+  for(var i=0;i<btns.length;i++) btns[i].classList.toggle('active', btns[i].getAttribute('data-f') === f);
+  renderOrders();
+}
+function statusBadge(s){
+  if(s === 'new') return '<span class="badge new">待处理</span>';
+  if(s === 'done') return '<span class="badge done">已完成</span>';
+  if(s === 'canceled') return '<span class="badge canceled">已取消</span>';
+  return '<span class="badge">' + escapeHtml(s) + '</span>';
+}
+function renderOrders(){
+  var list = $('#ordersList');
+  var filtered = orders.filter(function(o){ return currentFilter === 'all' ? true : o.status === currentFilter; });
+  if(filtered.length === 0){
+    list.innerHTML = '<li class="empty">暂无订单</li>';
+  } else {
+    list.innerHTML = filtered.map(function(o){
+      var lines = o.items.map(function(it){
+        return '<div class="order-line"><span class="n">' + escapeHtml(it.name) + '</span><span class="q">×' + it.qty + '</span></div>';
+      }).join('');
+      var noteHtml = o.note ? '<div class="order-note">备注：' + escapeHtml(o.note) + '</div>' : '';
+      var acts = '';
+      if(o.status === 'new'){
+        acts += '<button onclick="setOrderStatus(\'' + o.id + '\',\'done\')">完成</button>';
+        acts += '<button onclick="setOrderStatus(\'' + o.id + '\',\'canceled\')">取消</button>';
+      }
+      acts += '<button onclick="deleteOrder(\'' + o.id + '\')">删除</button>';
+      return '<li class="order">' +
+        '<div class="order-head">' +
+          '<span class="order-id">' + escapeHtml(o.id) + '</span>' +
+          '<span class="order-time">' + escapeHtml(fmtTime(o.time)) + '</span>' +
+          statusBadge(o.status) +
+        '</div>' +
+        '<div class="order-name">点单人：<b>' + escapeHtml(o.name || '未知') + '</b></div>' +
+        '<div class="order-body">' + lines + '</div>' +
+        noteHtml +
+        '<div class="order-foot">' +
+          '<span class="total-qty">共 <b>' + (o.totalQty || 0) + '</b> 杯</span>' +
+          '<div class="acts">' + acts + '</div>' +
+        '</div>' +
+      '</li>';
+    }).join('');
+  }
+  var totalCups = orders.reduce(function(s,o){ return s + (o.totalQty || 0); }, 0);
+  var newCount = orders.filter(function(o){ return o.status === 'new'; }).length;
+  $('#statCount').textContent = orders.length;
+  $('#statCups').textContent = totalCups;
+  $('#statNew').textContent = newCount;
+}
+function setOrderStatus(id, st){
+  for(var i=0;i<orders.length;i++){
+    if(orders[i].id === id){
+      orders[i].status = st; saveOrders(); renderOrders();
+      publishStatus(id, st);
+      toast('已更新状态'); return;
+    }
+  }
+}
+function deleteOrder(id){
+  orders = orders.filter(function(x){ return x.id !== id; });
+  saveOrders(); renderOrders(); publishDelete(id); toast('订单已删除');
+}
+function clearAllOrders(){
+  if(orders.length === 0){ toast('暂无订单可清空'); return; }
+  if(confirm('确定清空【本机】全部历史订单吗？（不影响其他设备）')){
+    orders = []; saveOrders(); renderOrders(); toast('已清空本机记录');
+  }
+}
+function exportOrders(){
+  if(orders.length === 0){ toast('暂无订单可导出'); return; }
+  var data = JSON.stringify(orders, null, 2);
+  var blob = new Blob([data], {type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bar-orders-' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('已导出订单 JSON');
+}
+
+/* ===== 持久化（本机备份） ===== */
+function saveOrders(){
+  try{ localStorage.setItem('goldenBarOrders_'+roomCode, JSON.stringify(orders)); }catch(e){}
+}
+function loadOrders(){
+  try{
+    var s = localStorage.getItem('goldenBarOrders_'+roomCode);
+    orders = s ? (JSON.parse(s) || []) : [];
+  }catch(e){ orders = []; }
+}
+
+/* ===== Tabs ===== */
+function switchTab(name){
+  $('#tabMenu').classList.toggle('active', name === 'menu');
+  $('#tabAdmin').classList.toggle('active', name === 'admin');
+  $('#panelMenu').classList.toggle('active', name === 'menu');
+  $('#panelAdmin').classList.toggle('active', name === 'admin');
+  if(name === 'admin') renderOrders();
+}
+
+/* ===== 房间号变更 ===== */
+function applyRoom(newRoom){
+  newRoom = (newRoom || '').trim().replace(/[^\u4e00-\u9fa5A-Z0-9_]/g,'');
+  if(!newRoom) newRoom = '聚力三班';
+  if(newRoom === roomCode) return;
+  roomCode = newRoom;
+  $('#roomInput').value = roomCode;
+  loadOrders();
+  renderOrders();
+  initQR();
+  // 重连 MQTT 到新房间
+  if(client){ try{ client.end(true); }catch(e){} client = null; }
+  connectMQTT();
+}
+
+/* ===== 入口 ===== */
+function checkFileMode(){
+  // 如果是 file:// 打开，手机无法访问，插入红色警告
+  if(location.protocol === 'file:'){
+    var warn = document.createElement('div');
+    warn.className = 'guide';
+    warn.style.borderColor = '#e25555';
+    warn.style.background = 'rgba(60,15,15,.85)';
+    warn.style.color = '#ffcccc';
+    warn.innerHTML = '<b style="color:#ff9999">⚠️ 当前是本地文件模式，手机无法访问此链接！</b>' +
+      '<ol style="margin-top:6px">' +
+      '<li>请关闭浏览器，双击运行同目录下的 <b style="color:#f5e7a0">start-server.bat</b></li>' +
+      '<li>它会自动启动服务器并打开本页（地址会变为 http://...）</li>' +
+      '<li>启动后，手机和电脑连同一 WiFi，用手机扫二维码或输入网址即可点单</li>' +
+      '</ol>';
+    var share = document.querySelector('.share-card');
+    share.parentNode.insertBefore(warn, share.nextSibling);
+    return true;
+  }
+  return false;
+}
+function init(){
+  // 从 URL 读取房间号 #order=聚力三班
+  var hash = window.location.hash || '';
+  var m = hash.match(/order=([^\s&]+)/);
+  if(m){ roomCode = decodeURIComponent(m[1]).replace(/[^\u4e00-\u9fa5A-Z0-9_]/g,'') || '聚力三班'; }
+  $('#roomInput').value = roomCode;
+  $('#roomInput').addEventListener('change', function(){ applyRoom(this.value); });
+  $('#shareHostInput').addEventListener('change', function(){
+    shareHost = this.value.trim();
+    initQR();
+    toast('分享地址已更新');
+  });
+
+  loadOrders();
+  renderMenu();
+  updateCart();
+  initQR();
+  renderOrders();
+  connectMQTT();
+  checkFileMode();
+
+  if(hash.indexOf('order') >= 0){
+    switchTab('menu');
+    setTimeout(function(){ toast('扫码/进入成功，请选择酒水 🍻'); }, 400);
+  }
+  window.addEventListener('hashchange', function(){
+    if(window.location.hash.indexOf('order') >= 0) switchTab('menu');
+  });
+}
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
